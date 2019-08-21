@@ -471,8 +471,12 @@ def extract_answer(q_text, p_texts, maxlen=12, threshold=0.1):
 
 
 def max_in_dict(d):
+    # TypeError: 'dict_keys'对象不可订阅
     if d:
-        return d.keys()[np.argmax(d.values())]
+        max_value = np.argmax(d.values())
+        for i, z in d.items():
+            if z == max_value:
+                return i
 
 
 def predict(data, filename, threshold=0.1):
