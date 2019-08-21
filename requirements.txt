@@ -1,0 +1,7 @@
+keras
+tqdm
+gensim
+numpy
+keras-radam
+paramiko
+tensorflow
