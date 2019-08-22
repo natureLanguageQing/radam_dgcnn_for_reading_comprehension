@@ -3,6 +3,7 @@
 
 import copy
 import json
+import sys
 
 from evaluate_tool.string_tool import *
 
@@ -45,8 +46,13 @@ def is_exact_match_answer(qid, competitor_answer):
     answer, answer_expand = qid_answer_expand[qid]
     if format_competitor_answer in answer_expand:
         return "1"
-    tmp_set1 = set([format_string(element) for element in drop_punctuation(competitor_answer).lower().split(" ")])
-    tmp_set2 = set([format_string(element) for element in drop_punctuation(answer).lower().split(" ")])
+    print(competitor_answer)
+    a = drop_punctuation(competitor_answer)
+    a = a.lower()
+    a = a.split()
+    print(a)
+    tmp_set1 = set([format_string(element) for element in a])
+    tmp_set2 = set([format_string(element) for element in drop_punctuation_two(answer).lower().split()])
     if tmp_set1 == tmp_set2:
         return "1"
     return "0"
@@ -93,13 +99,16 @@ def evaluate(input_file, output_file):
     sum_f = 0.0
     # 同时打开两个文件，一个文件读一个文件取
     with open(input_file, "r") as infile, open(output_file, "w") as outfile:
+        infile = infile.readlines()
+        print(len(infile))
         for line_message in infile:
             total += 1
             items = line_message.replace("\n", "").split("\t")
             if len(items) != 2:
-                raise ValueError(
-                    "Invalid line_message: '%s', which should have 2 fields. The 2 fields are query_id and "
-                    "competitor_answer" % line_message.strip())
+                # raise ValueError(
+                #     "Invalid line_message: '%s', which should have 2 fields. The 2 fields are query_id and "
+                #     "competitor_answer" % line_message.strip())
+                continue
             qid, competitor_answer = items
             right_flag = is_exact_match_answer(qid, competitor_answer)
             if right_flag == "1":
@@ -108,10 +117,11 @@ def evaluate(input_file, output_file):
             sum_f += max_f
             outfile.write("%s\t%s\t%s\t%f\t%f\t%f\t%s\n" % (
                 qid, competitor_answer, right_flag, max_f, max_f_precision, max_f_recall, max_f_answer))
-    # print "query-level precision=%d/%d=%f" % (right, total, 1.0*right/total)
-    # print "character-level average f value=%f/%f=%f" % (sum_f, total, sum_f/total)
+    print("query-level precision=%d/%d=%f" % (right, total, 1.0 * right / total))
+    print("character-level average f value=%f/%f=%f" % (sum_f, total, sum_f / total))
     return 1.0 * right / total, sum_f / total, (1.0 * right / total + sum_f / total) / 2.
 
 
 if __name__ == "__main__":
-    print(json.dumps(evaluate(sys.argv[1], sys.argv[2])))
+    # print(json.dumps(evaluate(sys.argv[1], sys.argv[2])))
+    print(json.dumps(evaluate("../dgcnn/tmp_result.txt", "../dgcnn/tmp_output.txt")))

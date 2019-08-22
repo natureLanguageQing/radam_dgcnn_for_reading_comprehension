@@ -98,7 +98,7 @@ def seq_padding(X, padding=0):
 
 
 class data_generator(object):
-    def __init__(self, data, batch_size=128):
+    def __init__(self, data, batch_size=256):
         self.data = data
         self.batch_size = batch_size
         self.steps = len(self.data) // self.batch_size
@@ -197,7 +197,8 @@ class OurLayer(Layer):
 
 
 class AttentionPooling1D(OurLayer):
-    """通过加性Attention，将向量序列融合为一个定长向量
+    """
+    通过加性Attention，将向量序列融合为一个定长向量
     """
 
     def __init__(self, h_dim=None, **kwargs):
@@ -473,10 +474,10 @@ def extract_answer(q_text, p_texts, maxlen=12, threshold=0.1):
 def max_in_dict(d):
     # TypeError: 'dict_keys'对象不可订阅
     if d:
-        max_value = np.argmax(d.values())
-        for i, z in d.items():
-            if z == max_value:
-                return i
+        # max_value = np.argmax(d.values())
+        # for i, z in d.items():
+        #     if z == max_value:
+        return sorted(d.items(), key=lambda s: -s[1])[0][0]
 
 
 def predict(data, filename, threshold=0.1):
@@ -493,6 +494,16 @@ def predict(data, filename, threshold=0.1):
             f.write(s)
 
 
+def evaluate(threshold=0.01):
+    predict(dev_data, 'tmp_result.txt', threshold=threshold)
+    acc, f1, final = json.loads(
+        os.popen(
+            'python ../evaluate_tool/evaluate.py tmp_result.txt tmp_output.txt'
+        ).read().strip()
+    )
+    return acc, f1, final
+
+
 class Evaluate(Callback):
     def __init__(self):
         self.metrics = []
@@ -501,7 +512,7 @@ class Evaluate(Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         EMAer.apply_ema_weights()
-        acc, f1, final = self.evaluate()
+        acc, f1, final = evaluate()
         self.metrics.append((epoch, acc, f1, final))
         json.dump(self.metrics, open('train.log', 'w'), indent=4)
         if final > self.best:
@@ -526,15 +537,6 @@ class Evaluate(Callback):
             opt_weights = K.batch_get_value(self.model.optimizer.weights)
             opt_weights = [w * 0. for w in opt_weights]
             K.batch_set_value(zip(self.model.optimizer.weights, opt_weights))
-
-    def evaluate(self, threshold=0.1):
-        predict(dev_data, 'tmp_result.txt', threshold=threshold)
-        acc, f1, final = json.loads(
-            os.popen(
-                'python ../evaluate_tool/evaluate.py tmp_result.txt tmp_output.txt'
-            ).read().strip()
-        )
-        return acc, f1, final
 
 
 train_D = data_generator(train_data)
