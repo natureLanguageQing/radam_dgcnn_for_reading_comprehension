@@ -21,7 +21,9 @@ mode = 0
 char_size = 128
 max_len = 256
 min_count = 16
+batch_size = 256
 
+train_page_size = 3096
 word2vec = Word2Vec.load('../word2vec_baike/all_second.model')
 
 id2word = {i + 1: j for i, j in enumerate(word2vec.wv.index2word)}
@@ -55,6 +57,9 @@ def sent2vec(S):
 
 webqa_data = json.load(open('../datasets/WebQA.json'))
 sogou_data = json.load(open('../datasets/SogouQA.json'))
+if train_page_size:
+    webqa_data = webqa_data[:train_page_size]
+    sogou_data = sogou_data[:train_page_size]
 
 if not os.path.exists('../dgcnn_config.json'):
     chars = {}
@@ -98,7 +103,7 @@ def seq_padding(X, padding=0):
 
 
 class data_generator(object):
-    def __init__(self, data, batch_size=256):
+    def __init__(self, data, batch_size=batch_size):
         self.data = data
         self.batch_size = batch_size
         self.steps = len(self.data) // self.batch_size
@@ -472,36 +477,65 @@ def extract_answer(q_text, p_texts, maxlen=12, threshold=0.1):
 
 
 def max_in_dict(d):
-    # TypeError: 'dict_keys'对象不可订阅
     if d:
-        # max_value = np.argmax(d.values())
-        # for i, z in d.items():
-        #     if z == max_value:
         return sorted(d.items(), key=lambda s: -s[1])[0][0]
 
 
 def predict(data, filename, threshold=0.1):
-    with codecs.open(filename, 'w', encoding='utf-8') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         for d in tqdm(iter(data)):
             q_text = d['question']
             p_texts = [p['passage'] for p in d['passages']]
             a = extract_answer(q_text, p_texts, threshold=threshold)
             a = max_in_dict(a)
-            if a:
+            if a and a != " ":
                 s = u'%s\t%s\n' % (d['id'], a)
             else:
-                s = u'%s\t\n' % (d['id'])
+                s = u'%s\t%s\n' % (d['id'], '没找到答案')
             f.write(s)
 
 
 def evaluate(threshold=0.01):
     predict(dev_data, 'tmp_result.txt', threshold=threshold)
-    acc, f1, final = json.loads(
-        os.popen(
-            'python ../evaluate_tool/evaluate.py tmp_result.txt tmp_output.txt'
-        ).read().strip()
-    )
+    # acc, f1, final = json.loads(
+    #     os.popen(
+    #         r'python ../evaluate_tool/evaluate.py E:\baidu_code\dgcnn_for_reading_comprehension\dgcnn\tmp_result.txt '
+    #         r'tmp_output.txt '
+    #     ).read().strip()
+    # )
+    acc, f1, final = evaluate_acc("tmp_result.txt", "out_result.txt")
+    print(acc, f1, final)
     return acc, f1, final
+
+
+def evaluate_acc(input_file, output_file):
+    load_qid_answer_expand("qid_answer_expand")
+    total = 0
+    right = 0
+    sum_f = 0.0
+    # 同时打开两个文件，一个文件读一个文件取
+    with open(input_file, "r") as infile, open(output_file, "w") as outfile:
+        infile = infile.readlines()
+        print(len(infile))
+        for line_message in infile:
+            total += 1
+            items = line_message.replace("\n", "").split("\t")
+            if len(items) != 2:
+                # raise ValueError(
+                #     "Invalid line_message: '%s', which should have 2 fields. The 2 fields are query_id and "
+                #     "competitor_answer" % line_message.strip())
+                continue
+            qid, competitor_answer = items
+            right_flag = is_exact_match_answer(qid, competitor_answer)
+            if right_flag == "1":
+                right += 1
+            max_f, max_f_precision, max_f_recall, max_f_answer = cacu_character_level_f(qid, competitor_answer)
+            sum_f += max_f
+            outfile.write("%s\t%s\t%s\t%f\t%f\t%f\t%s\n" % (
+                qid, competitor_answer, right_flag, max_f, max_f_precision, max_f_recall, max_f_answer))
+    print("query-level precision=%d/%d=%f" % (right, total, 1.0 * right / total))
+    print("character-level average f value=%f/%f=%f" % (sum_f, total, sum_f / total))
+    return 1.0 * right / total, sum_f / total, (1.0 * right / total + sum_f / total) / 2.
 
 
 class Evaluate(Callback):
@@ -513,6 +547,7 @@ class Evaluate(Callback):
     def on_epoch_end(self, epoch, logs=None):
         EMAer.apply_ema_weights()
         acc, f1, final = evaluate()
+        print('准确率', epoch, acc, f1, final)
         self.metrics.append((epoch, acc, f1, final))
         json.dump(self.metrics, open('train.log', 'w'), indent=4)
         if final > self.best:
