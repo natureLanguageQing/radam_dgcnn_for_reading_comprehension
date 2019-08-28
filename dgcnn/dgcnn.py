@@ -11,9 +11,11 @@ import jieba_fast as jieba
 # 向量操作框架
 import numpy as np
 # 词向量读取
-from gensim.models import Word2Vec
+from gensim.models import KeyedVectors
 # 进度条
 from tqdm import tqdm
+
+from evaluate import load_qid_answer_expand, is_exact_match_answer, cacu_character_level_f
 
 warnings.filterwarnings("ignore")  # 忽略keras带来的满屏警告
 
@@ -23,8 +25,8 @@ max_len = 256
 min_count = 16
 batch_size = 256
 
-train_page_size = 3096
-word2vec = Word2Vec.load('../word2vec_baike/all_second.model')
+# train_page_size = 3096
+word2vec = KeyedVectors.load_word2vec_format('../word2vec_baike/sgns.weibo.bigram')
 
 id2word = {i + 1: j for i, j in enumerate(word2vec.wv.index2word)}
 word2id = {j: i for i, j in id2word.items()}
@@ -57,9 +59,9 @@ def sent2vec(S):
 
 webqa_data = json.load(open('../datasets/WebQA.json'))
 sogou_data = json.load(open('../datasets/SogouQA.json'))
-if train_page_size:
-    webqa_data = webqa_data[:train_page_size]
-    sogou_data = sogou_data[:train_page_size]
+# if train_page_size:
+#     webqa_data = webqa_data[:train_page_size]
+#     sogou_data = sogou_data[:train_page_size]
 
 if not os.path.exists('../dgcnn_config.json'):
     chars = {}
